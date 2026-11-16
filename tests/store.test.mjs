@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createStore,STORAGE_KEY,projectProgress,overdue,validateData} from '../src/store.js';
+import {makeDemoData,STATUSES} from '../src/data.js';
+const memory=()=>{const d=new Map();return {getItem:k=>d.get(k)??null,setItem:(k,v)=>d.set(k,v),removeItem:k=>d.delete(k)}};
+test('demo workspaces have projects, stakeholders, risks and milestones',()=>{const d=makeDemoData();assert.equal(d.projects.length,2);for(const key of ['tasks','milestones','risks','stakeholders'])assert.ok(d[key].length>0);validateData(d);});
+test('store persists projects and tasks between sessions',()=>{const storage=memory();const store=createStore(storage);store.update(db=>{db.projects.push({id:'new',name:'New project',archived:false});db.tasks.push({id:'task-new',projectId:'new',title:'First task',status:'To Do'});});const fresh=createStore(storage).get();assert.equal(fresh.projects.at(-1).name,'New project');assert.equal(fresh.tasks.at(-1).title,'First task');});
+test('editing, status changes and deletion persist',()=>{const storage=memory(),s=createStore(storage);s.update(db=>{db.tasks[0].title='Renamed task';db.tasks[0].status='In Progress';});assert.equal(createStore(storage).get().tasks[0].title,'Renamed task');s.update(db=>{db.tasks.splice(0,1);});assert.ok(!createStore(storage).get().tasks.some(t=>t.id==='ft1'));});
+test('project progress is correct and excludes unrelated tasks',()=>{const d=makeDemoData();assert.equal(projectProgress(d.tasks,'festival'),25);assert.equal(projectProgress([],'any'),0);});
+test('overdue tasks exclude completed',()=>{assert.equal(overdue({status:'To Do',dueDate:'2001-01-01'}),true);assert.equal(overdue({status:'Completed',dueDate:'2001-01-01'}),false);});
+test('import validation rejects broken references and statuses',()=>{const d=makeDemoData();d.tasks[0].projectId='missing';assert.throws(()=>validateData(d));d.tasks[0].projectId='festival';d.tasks[0].status='invalid';assert.throws(()=>validateData(d));});
+test('export/import roundtrip and reset',()=>{const storage=memory(),s=createStore(storage),original=s.get();s.update(db=>{db.projects[0].name='Changed'});s.import(JSON.parse(JSON.stringify(original)));assert.equal(s.get().projects[0].name,original.projects[0].name);s.update(db=>{db.projects[0].archived=true});s.reset();assert.equal(s.get().projects.length,2);});
+test('storage failure surfaces explicit error',()=>{const storage={getItem:()=>null,setItem:()=>{throw Error('Blocked')}};const s=createStore(storage);assert.match(s.error(),/Saving failed/);});
