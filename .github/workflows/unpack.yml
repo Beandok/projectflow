@@ -1,25 +1,18 @@
-name: Publish ProjectFlow source
+name: ProjectFlow CI
 on:
   push:
-    paths:
-      - 'bootstrap/projectflow-source.tar.gz.b64'
-  workflow_dispatch:
+  pull_request:
 permissions:
-  contents: write
+  contents: read
 jobs:
-  unpack:
+  test-and-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Extract application source
-        run: |
-          base64 --decode bootstrap/projectflow-source.tar.gz.b64 | tar -xz
-          sed -i '/!\[Dashboard\](assets\/dashboard.png)/d; /!\[Mobile layout\](assets\/mobile.png)/d' README.md
-          npm run build
-      - name: Commit extracted sources
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md index.html package.json vercel.json src docs scripts tests server.mjs assets/favicon.svg
-          git commit -m "Publish readable ProjectFlow MVP source" || exit 0
-          git push
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify application
+        run: npm run build
